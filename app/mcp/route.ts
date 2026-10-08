@@ -1,18 +1,14 @@
 import { authenticated } from "@/lib/server";
 import { chatTools, runChatTool } from "@/lib/chat-tools";
 import { unpackState, payloadJSON } from "@/lib/transport";
+import { authChallenge, schedulerOrigin } from "@/lib/mcp-auth";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
-  // This endpoint currently uses the app's Supabase user session. Host OAuth pairing is separate.
-  let auth;
-  try {
-    auth = await authenticated(request);
-  } catch {
-    return Response.json(
-      { error: "Authentication required" },
-      { status: 401, headers: { "Cache-Control": "no-store" } },
-    );
-  }
+  const origin = request.headers.get("origin");
+  if (origin && origin !== schedulerOrigin)
+    return new Response(null, { status: 403 });
+  if (Number(request.headers.get("content-length") || 0) > 4_000_000)
+    return new Response(null, { status: 413 });
   if (!request.headers.get("content-type")?.includes("application/json"))
     return new Response(null, { status: 415 });
   const raw = await request.text();
@@ -42,7 +38,11 @@ export async function POST(request: Request) {
   if (body.id === undefined) return new Response(null, { status: 202 });
   if (body.method === "initialize")
     return reply({
-      protocolVersion: "2025-03-26",
+      protocolVersion: ["2025-03-26", "2025-06-18", "2025-11-25"].includes(
+        body.params?.protocolVersion,
+      )
+        ? body.params.protocolVersion
+        : "2025-03-26",
       capabilities: { tools: {} },
       serverInfo: { name: "facebook-scheduler", version: "0.1.0" },
     });
@@ -55,6 +55,21 @@ export async function POST(request: Request) {
       error: { code: -32601, message: "Method not found" },
     });
   try {
+    let auth;
+    try {
+      auth = await authenticated(request);
+    } catch {
+      return Response.json(
+        { error: "Authentication required" },
+        {
+          status: 401,
+          headers: {
+            "Cache-Control": "no-store",
+            "WWW-Authenticate": authChallenge(),
+          },
+        },
+      );
+    }
     const { db, user } = auth;
     const { data, error } = await db
       .from("scheduler_workspaces")
@@ -93,4 +108,12 @@ export async function POST(request: Request) {
       ],
     });
   }
+}
+
+// No persistent SSE stream or server-side session is needed for these tools.
+export function GET() {
+  return new Response(null, { status: 405, headers: { Allow: "POST" } });
+}
+export function DELETE() {
+  return new Response(null, { status: 405, headers: { Allow: "POST" } });
 }

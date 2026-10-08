@@ -1,0 +1,17 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "facebook-scheduler",
+  "version": "0.1.0",
+  "description": "Gerencie posts e agendamentos no Facebook Scheduler com confirmação manual no Facebook.",
+  "author": { "name": "ThaleszCodes" },
+  "extensions": { "com.openai": { "interface": {
+    "displayName": "Facebook Scheduler",
+    "shortDescription": "Agende posts pelo chat",
+    "longDescription": "Consulte grupos e horários, cadastre copy e imagem, agende e cancele posts no seu Scheduler. Requer login e autorização. Não publica automaticamente no Facebook.",
+    "developerName": "ThaleszCodes",
+    "category": "Productivity",
+    "logo": "./assets/icon.png",
+    "capabilities": ["Interactive"],
+    "defaultPrompt": "Prepare e agende um post no meu Facebook Scheduler."
+  } } }
+}
