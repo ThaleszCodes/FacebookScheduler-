@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { humanError } from "./errors";
+import { shouldReloadWorkspace } from "./auth-workspace";
 import { unpackState, payloadJSON } from "./transport";
 import { supabase, configured } from "./supabase";
 import { emptyState, validateState, type AppState } from "./model";
@@ -15,6 +16,7 @@ export function useWorkspace() {
     [revision, setRevision] = useState(0);
   const busy = useRef(false);
   const loadGeneration = useRef(0);
+  const loadedUser = useRef<string | null | undefined>(undefined);
   async function load(s: Session | null) {
     const generation = ++loadGeneration.current;
     setLoading(true);
@@ -51,18 +53,26 @@ export function useWorkspace() {
   useEffect(() => {
     let active = true;
     if (supabase) {
-      supabase.auth.getSession().then(({ data }) => {
-        if (active) {
-          setSession(data.session);
-          void load(data.session);
-        }
-      });
-      const { data } = supabase.auth.onAuthStateChange((_e, s) => {
+      const acceptSession = (s: Session | null) => {
+        if (!active) return;
         setSession(s);
+        const userId = s?.user.id ?? null;
+        if (!shouldReloadWorkspace(loadedUser.current, userId)) return;
+        loadedUser.current = userId;
+        // Only an initial session or an account change replaces the workspace.
+        // SIGNED_IN on tab focus and TOKEN_REFRESHED must preserve mounted forms.
         setLoading(true);
         setTimeout(() => {
-          if (active) void load(s);
+          if (active && loadedUser.current === userId) void load(s);
         }, 0);
+      };
+      const { data } = supabase.auth.onAuthStateChange((_event, s) => {
+        acceptSession(s);
+      });
+      // The subscription's initial event may arrive before this promise resolves.
+      // Do not let an older getSession result overwrite a newer auth event.
+      supabase.auth.getSession().then(({ data }) => {
+        if (loadedUser.current === undefined) acceptSession(data.session);
       });
       return () => {
         active = false;
